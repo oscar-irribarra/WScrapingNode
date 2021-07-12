@@ -1,0 +1,11 @@
+{
+  "name": "scrapping",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "jsdom": "^16.6.0",
+    "jspdf": "^2.3.1",
+    "node-fetch": "^2.6.1"
+  }
+}
