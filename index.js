@@ -1,9 +1,8 @@
 const fetch = require('node-fetch');
 const jsdom = require('jsdom');
 const { JSDOM } = jsdom;
-
 const { jsPDF } = require('jspdf');
-const { CONST_URL } = require('./constantes');
+const { CONST_URL, PROLOGO } = require('./constantes');
 
 const fetchHTML = async (url) => {
   const datafetch = await fetch(url, {
@@ -17,6 +16,13 @@ const fetchHTML = async (url) => {
   return await datafetch.text();
 };
 
+const fetchBase64Image = async (url) => {
+  const data = await fetch(url);
+  const buffer = await data.buffer();
+
+  return buffer.toString('base64');
+};
+
 const getDataElementHtml = (data) => {
   const parser = new JSDOM(data, {});
   let contenido = '';
@@ -27,55 +33,64 @@ const getDataElementHtml = (data) => {
     .forEach((p = HTMLParagraphElement) => {
       if (p && p.firstElementChild && p.firstElementChild.src) {
         contenido += '\n\n' + p.firstElementChild.src;
-      } else {
-        contenido += '\n\n' + p.textContent;
+      } else if (p && p.textContent && p.textContent.trim().length > 0) {
+        contenido += '\n\n' + p.textContent.replace('◇ ◇ ◇', '* * *');
       }
     });
-
   return contenido;
 };
 
-const generatePDF = async (textData) => {
+const generatePDF = async (textData, pdfname) => {
   const pageWidthInMM = 210;
-  const doc = new jsPDF('p', 'mm', 'a4');
-
-  let marginRightInMM = 15;
-
   const marginLeftInMM = 10;
+  const marginRightInMM = 15;
 
-  const bodyContent = doc.splitTextToSize(
-    textData,
-    pageWidthInMM - marginRightInMM
-  );
-  const pageHeightInMM = doc.internal.pageSize.getHeight();
-
-  //estilos
-  doc.setFillColor('#15202B');
-  doc.rect(0, 0, pageWidthInMM, pageHeightInMM, 'F');
+  const doc = new jsPDF('p', 'mm', 'a4');
   doc.setTextColor('#FFFFFF');
+  doc.setFillColor('#15202B');
 
-  for (var i = 0; i < bodyContent.length; i++) {
-    if (marginRightInMM + 10 > pageHeightInMM) {
-      marginRightInMM = 15;
+  const body = doc.splitTextToSize(textData, pageWidthInMM - marginRightInMM);
+  const customPageHeight = doc.internal.pageSize.getHeight();
+
+  doc.rect(0, 0, pageWidthInMM, customPageHeight, 'F');
+
+  let marginFromTopOfPage = 15; //margen de cada linea de texto con respecto al tope de pagina, al superar el tamaño de la pagina, se resetea y agrega una pagina nueva.
+  for (var i = 0; i < body.length; i++) {
+    if (marginFromTopOfPage + 10 > customPageHeight) {
+      marginFromTopOfPage = 15;
       doc.addPage();
 
       doc.setFillColor('#15202B');
-      doc.rect(0, 0, pageWidthInMM, pageHeightInMM, 'F');
+      doc.rect(0, 0, pageWidthInMM, customPageHeight, 'F');
     }
-    if (bodyContent[i].includes('https://i.imgur.com/')) {
-      // doc.addImage(res, 'PNG', 10, 0, 100, 100);
+
+    if (body[i].includes('https')) {
+      doc.addPage();
+      const image = await fetchBase64Image(body[i]);
+      doc.addImage(image, 'PNG', 0, 0, pageWidthInMM, customPageHeight);
     } else {
-      doc.text(bodyContent[i], marginLeftInMM, marginRightInMM, 'left'); //see this line
+      if (body[i].includes('* * *')) {
+        doc.text(body[i], pageWidthInMM / 2, 20, 'center');
+      } else {
+        doc.text(body[i], marginLeftInMM, marginFromTopOfPage, 'left');
+      }
     }
-    marginRightInMM = marginRightInMM + 7;
+    marginFromTopOfPage = marginFromTopOfPage + 7;
   }
-  doc.save('file.pdf');
+  doc.save(`pdf/${pdfname}.pdf`);
 };
 
-const generatePdfFormHtml = async () => {
-  const html = await fetchHTML(CONST_URL);
+const main = async () => {
+  // const url = PROLOGO;
+  const url = CONST_URL;
+
+  const arrayName = url.split('/');
+  const pdfName = arrayName[arrayName.length - 2];
+
+  const html = await fetchHTML(url);
   const data = getDataElementHtml(html);
-  await generatePDF(data);
+
+  await generatePDF(data, pdfName);
 };
 
-generatePdfFormHtml();
+main();
